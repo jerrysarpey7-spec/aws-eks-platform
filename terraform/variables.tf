@@ -9,3 +9,15 @@ variable "cluster_name" {
   type        = string
   default     = "portfolio-eks"
 }
+
+variable "cluster_admin_principal_arn" {
+  description = "IAM principal allowed to administer the EKS cluster"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_public_access_cidr" {
+  description = "CIDR allowed to access the public EKS API endpoint"
+  type        = string
+  sensitive   = true
+}

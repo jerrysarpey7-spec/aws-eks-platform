@@ -41,7 +41,7 @@ module "eks" {
   cluster_endpoint_private_access = true
 
   cluster_endpoint_public_access_cidrs = [
-    "99.132.118.234/32"
+    var.cluster_public_access_cidr
   ]
 
   vpc_id     = module.vpc.vpc_id
@@ -51,7 +51,7 @@ module "eks" {
 
   access_entries = {
     itadmin = {
-      principal_arn = "arn:aws:iam::830088750044:user/itadmin"
+      principal_arn = var.cluster_admin_principal_arn
 
       policy_associations = {
         cluster_admin = {
@@ -64,6 +64,7 @@ module "eks" {
       }
     }
   }
+
   eks_managed_node_groups = {
     default = {
       instance_types = ["t3.medium"]

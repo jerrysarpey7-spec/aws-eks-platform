@@ -1,0 +1,7 @@
+# Example Terraform variable configuration.
+# Copy this file to terraform.tfvars and replace the placeholders
+# with values from your own AWS environment.
+
+cluster_admin_principal_arn = "arn:aws:iam::<AWS-ACCOUNT-ID>:user/<IAM-USER>"
+
+cluster_public_access_cidr = "<YOUR-PUBLIC-IP>/32"
