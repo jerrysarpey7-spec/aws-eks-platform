@@ -55,3 +55,24 @@ jobs:
 
       - name: Render Helm Templates
         run: helm template demo-app helm/demo-app
+
+
+
+  checkov:
+    name: Checkov IaC Scan
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          framework: terraform
+          quiet: false
+          soft_fail: true
