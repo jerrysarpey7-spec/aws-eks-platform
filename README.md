@@ -1545,3 +1545,1834 @@ aws-eks-platform/
 
 Core infrastructure, EKS access troubleshooting, and Helm validation have been worked through as part of the project. Argo CD/GitOps validation should be marked complete only after the corresponding commands have successfully run in the environment. CI/DevSecOps automation remains a planned extension until implemented and tested.
 
+# Phase 4: CI/CD and DevSecOps Automation with GitHub Actions
+
+## Overview
+
+After provisioning the AWS infrastructure with Terraform, deploying the Kubernetes application with Helm, and implementing GitOps continuous delivery with ArgoCD, the next phase of the project introduces automated Continuous Integration (CI) and DevSecOps validation.
+
+The objective of this phase is to ensure that infrastructure and application configuration changes are automatically validated and security-scanned before they become part of the desired state managed by ArgoCD.
+
+The CI pipeline uses GitHub Actions to perform:
+
+- Terraform formatting validation
+- Terraform initialization
+- Terraform configuration validation
+- Helm chart linting
+- Helm template rendering
+- Infrastructure-as-Code security scanning with Checkov
+- Repository security scanning with Trivy
+
+ArgoCD remains responsible for Continuous Delivery (CD).
+
+The resulting workflow is:
+
+```text
+Developer
+    |
+    v
+Git Push / Pull Request
+    |
+    v
+GitHub
+    |
+    v
+GitHub Actions
+    |
+    +-----------------------------+
+    |                             |
+    v                             v
+Terraform Validation        Helm Validation
+    |                             |
+    +-------------+---------------+
+                  |
+                  v
+              Checkov
+                  |
+                  v
+               Trivy
+                  |
+                  v
+        Validated Git Repository
+                  |
+                  v
+               ArgoCD
+                  |
+                  v
+             Amazon EKS
+                  |
+                  v
+        Kubernetes Application
+```
+
+---
+
+## 1. CI/CD Design
+
+This project separates Continuous Integration and Continuous Delivery responsibilities.
+
+### Continuous Integration
+
+GitHub Actions performs CI validation.
+
+The CI pipeline checks:
+
+```text
+Terraform
+├── terraform fmt
+├── terraform init
+└── terraform validate
+
+Helm
+├── helm lint
+└── helm template
+
+Security
+├── Checkov
+└── Trivy
+```
+
+### Continuous Delivery
+
+ArgoCD performs CD.
+
+```text
+GitHub Repository
+        |
+        v
+      ArgoCD
+        |
+        v
+Desired State Comparison
+        |
+        v
+Automatic Synchronization
+        |
+        v
+    Amazon EKS
+```
+
+This separation means GitHub Actions validates changes while ArgoCD continuously reconciles the approved desired state stored in Git with the Kubernetes cluster.
+
+---
+
+# 2. Create the GitHub Actions Directory
+
+From the root of the repository, create the GitHub Actions workflow directory.
+
+Project structure:
+
+```text
+aws-eks-platform/
+│
+├── .github/
+│   └── workflows/
+│       └── validate.yml
+│
+├── argocd/
+│   └── application.yaml
+│
+├── helm/
+│   └── demo-app/
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       └── templates/
+│           ├── deployment.yaml
+│           └── service.yaml
+│
+├── terraform/
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   ├── versions.tf
+│   └── .terraform.lock.hcl
+│
+├── .gitignore
+└── README.md
+```
+
+The workflow file is located at:
+
+```text
+.github/workflows/validate.yml
+```
+
+GitHub automatically recognizes YAML workflow files stored under:
+
+```text
+.github/workflows/
+```
+
+---
+
+# 3. Create the Initial GitHub Actions Workflow
+
+Create:
+
+```text
+.github/workflows/validate.yml
+```
+
+Add the following configuration:
+
+```yaml
+name: Validate Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  terraform:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+  helm:
+    name: Helm Validation
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm Lint
+        run: helm lint helm/demo-app
+
+      - name: Render Helm Templates
+        run: helm template demo-app helm/demo-app
+```
+
+---
+
+# 4. Workflow Triggers
+
+The workflow contains three triggers.
+
+## Push to Main
+
+```yaml
+push:
+  branches:
+    - main
+```
+
+The workflow runs whenever code is pushed to the `main` branch.
+
+Example:
+
+```text
+Developer
+   |
+   v
+git push origin main
+   |
+   v
+GitHub Actions starts
+```
+
+---
+
+## Pull Requests
+
+```yaml
+pull_request:
+  branches:
+    - main
+```
+
+The workflow also runs when a pull request targets `main`.
+
+This supports a more production-like workflow:
+
+```text
+Feature Branch
+      |
+      v
+Pull Request
+      |
+      v
+GitHub Actions
+      |
+      +--> Terraform Validation
+      +--> Helm Validation
+      +--> Security Scanning
+      |
+      v
+Review
+      |
+      v
+Merge
+```
+
+---
+
+## Manual Execution
+
+```yaml
+workflow_dispatch:
+```
+
+This allows the workflow to be started manually from the GitHub Actions interface.
+
+---
+
+# 5. Repository Checkout
+
+Each job begins by checking out the repository.
+
+```yaml
+- name: Checkout repository
+  uses: actions/checkout@v4
+```
+
+GitHub Actions runners start with a clean environment.
+
+Therefore, the repository must first be downloaded onto the runner before Terraform, Helm, Checkov, or Trivy can inspect the project.
+
+Conceptually:
+
+```text
+GitHub Repository
+       |
+       v
+actions/checkout
+       |
+       v
+GitHub Actions Runner
+       |
+       v
+Project files available
+```
+
+---
+
+# 6. Terraform Validation Job
+
+The Terraform job validates the Infrastructure-as-Code configuration.
+
+```yaml
+terraform:
+  name: Terraform Validation
+  runs-on: ubuntu-latest
+```
+
+The runner uses:
+
+```text
+Ubuntu Linux
+```
+
+The Terraform working directory is configured as:
+
+```yaml
+defaults:
+  run:
+    working-directory: terraform
+```
+
+This means Terraform commands execute inside:
+
+```text
+terraform/
+```
+
+instead of the repository root.
+
+---
+
+# 7. Install Terraform in the Runner
+
+Terraform is installed using:
+
+```yaml
+- name: Setup Terraform
+  uses: hashicorp/setup-terraform@v3
+```
+
+The runner can then execute Terraform commands.
+
+---
+
+# 8. Terraform Formatting Validation
+
+The first Terraform test is:
+
+```yaml
+- name: Terraform Format Check
+  run: terraform fmt -check -recursive
+```
+
+Equivalent local command:
+
+```bash
+terraform fmt -check -recursive
+```
+
+This checks whether Terraform files follow standard Terraform formatting conventions.
+
+It does not modify the files because `-check` is being used.
+
+If formatting is incorrect, the CI job fails.
+
+To correct formatting locally:
+
+```bash
+cd terraform
+terraform fmt -recursive
+cd ..
+```
+
+Then review the changes:
+
+```bash
+git status
+git diff
+```
+
+Commit the formatting correction:
+
+```bash
+git add terraform
+git commit -m "Format Terraform configuration"
+git push origin main
+```
+
+The workflow automatically runs again.
+
+---
+
+# 9. Terraform Initialization
+
+The next step is:
+
+```yaml
+- name: Terraform Init
+  run: terraform init -backend=false
+```
+
+This initializes the Terraform working directory.
+
+The option:
+
+```text
+-backend=false
+```
+
+is intentional.
+
+CI validation does not need access to the production Terraform state backend.
+
+The objective is to initialize:
+
+- Terraform providers
+- Terraform modules
+- provider dependencies
+
+without accessing remote state.
+
+Conceptually:
+
+```text
+Terraform Source
+      |
+      v
+terraform init
+      |
+      +--> AWS Provider
+      |
+      +--> VPC Module
+      |
+      +--> EKS Module
+      |
+      v
+Terraform initialized
+```
+
+---
+
+# 10. Terraform Configuration Validation
+
+The final Terraform validation command is:
+
+```yaml
+- name: Terraform Validate
+  run: terraform validate
+```
+
+Equivalent local command:
+
+```bash
+terraform validate
+```
+
+A successful result looks similar to:
+
+```text
+Success! The configuration is valid.
+```
+
+This checks Terraform configuration syntax and internal consistency.
+
+The CI pipeline therefore validates Terraform in the following order:
+
+```text
+Terraform Code
+      |
+      v
+terraform fmt -check
+      |
+      v
+terraform init
+      |
+      v
+terraform validate
+      |
+      v
+Terraform Validation Passed
+```
+
+---
+
+# 11. Helm Validation Job
+
+The second CI job validates the Helm chart.
+
+```yaml
+helm:
+  name: Helm Validation
+  runs-on: ubuntu-latest
+```
+
+The Helm validation process performs:
+
+```text
+Helm Chart
+    |
+    v
+helm lint
+    |
+    v
+helm template
+    |
+    v
+Rendered Kubernetes YAML
+```
+
+---
+
+# 12. Install Helm
+
+Helm is installed on the GitHub Actions runner using:
+
+```yaml
+- name: Setup Helm
+  uses: azure/setup-helm@v4
+```
+
+---
+
+# 13. Helm Lint Validation
+
+The first Helm test is:
+
+```yaml
+- name: Helm Lint
+  run: helm lint helm/demo-app
+```
+
+Equivalent local command:
+
+```bash
+helm lint helm/demo-app
+```
+
+A successful result is similar to:
+
+```text
+==> Linting helm/demo-app
+[INFO] Chart.yaml: icon is recommended
+
+1 chart(s) linted, 0 chart(s) failed
+```
+
+Helm lint checks the chart for problems before deployment.
+
+---
+
+# 14. Helm Template Rendering
+
+The second Helm validation step is:
+
+```yaml
+- name: Render Helm Templates
+  run: helm template demo-app helm/demo-app
+```
+
+Equivalent local command:
+
+```bash
+helm template demo-app helm/demo-app
+```
+
+This renders the Helm templates into Kubernetes manifests without deploying them.
+
+Conceptually:
+
+```text
+Chart.yaml
+     +
+values.yaml
+     +
+templates/
+     |
+     v
+Helm Rendering Engine
+     |
+     v
+Kubernetes YAML
+```
+
+This provides an additional validation layer before ArgoCD attempts to synchronize the application.
+
+---
+
+# 15. Test the CI Workflow Locally
+
+Before pushing the workflow, the same major validation commands were tested locally.
+
+Terraform:
+
+```bash
+cd terraform
+
+terraform fmt -check -recursive
+
+terraform validate
+
+cd ..
+```
+
+Helm:
+
+```bash
+helm lint helm/demo-app
+```
+
+Then:
+
+```bash
+helm template demo-app helm/demo-app
+```
+
+This follows the principle:
+
+```text
+Test Locally
+     |
+     v
+Commit
+     |
+     v
+Push
+     |
+     v
+Test Again in CI
+```
+
+---
+
+# 16. Commit the Initial CI Workflow
+
+Check repository status:
+
+```bash
+git status
+```
+
+Stage the workflow:
+
+```bash
+git add .github/workflows/validate.yml
+```
+
+Review what will be committed:
+
+```bash
+git diff --cached
+```
+
+Commit:
+
+```bash
+git commit -m "Add Terraform and Helm validation workflow"
+```
+
+Push:
+
+```bash
+git push origin main
+```
+
+Because the workflow listens for pushes to `main`, pushing the commit automatically starts GitHub Actions.
+
+---
+
+# 17. Validate the Workflow in GitHub
+
+Navigate to:
+
+```text
+GitHub Repository
+      |
+      v
+Actions
+      |
+      v
+Validate Infrastructure
+```
+
+The initial workflow contains:
+
+```text
+Terraform Validation
+Helm Validation
+```
+
+Successful execution should show both jobs passing.
+
+```text
+✓ Terraform Validation
+✓ Helm Validation
+```
+
+This confirms that infrastructure and Helm configuration can be validated automatically outside the local development environment.
+
+---
+
+# 18. Add Infrastructure Security Scanning with Checkov
+
+After establishing the initial CI validation pipeline, Infrastructure-as-Code security scanning is added using Checkov.
+
+Checkov analyzes Terraform configuration against security and configuration policies.
+
+The purpose is to identify potentially insecure infrastructure configuration before deployment.
+
+The flow becomes:
+
+```text
+Terraform
+    |
+    v
+Syntax Validation
+    |
+    v
+Checkov
+    |
+    v
+Security Findings
+```
+
+---
+
+# 19. Add the Checkov Job
+
+Add the following job to:
+
+```text
+.github/workflows/validate.yml
+```
+
+```yaml
+  checkov:
+    name: Checkov IaC Scan
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          framework: terraform
+          quiet: false
+          soft_fail: true
+```
+
+The workflow now contains:
+
+```text
+jobs:
+├── terraform
+├── helm
+└── checkov
+```
+
+---
+
+# 20. Checkov Scan Scope
+
+The configuration:
+
+```yaml
+directory: terraform
+```
+
+tells Checkov to scan:
+
+```text
+terraform/
+```
+
+The configuration:
+
+```yaml
+framework: terraform
+```
+
+limits this particular scan to Terraform Infrastructure-as-Code.
+
+---
+
+# 21. Initial Checkov Reporting Mode
+
+The initial implementation uses:
+
+```yaml
+soft_fail: true
+```
+
+This is intentional.
+
+During the first security assessment, findings should be visible without immediately blocking the CI pipeline.
+
+The initial process is:
+
+```text
+Checkov Scan
+     |
+     v
+Security Finding
+     |
+     v
+Review Finding
+     |
+     +--> Fix
+     |
+     +--> Accept with justification
+     |
+     +--> Investigate further
+```
+
+Security findings should not automatically be suppressed without understanding the reason for the finding.
+
+The long-term objective is to move from:
+
+```yaml
+soft_fail: true
+```
+
+to:
+
+```yaml
+soft_fail: false
+```
+
+after important findings have been remediated or appropriately documented.
+
+At that point Checkov becomes a blocking security gate.
+
+---
+
+# 22. Review Checkov Results
+
+After pushing the workflow, navigate to:
+
+```text
+GitHub
+→ Actions
+→ Validate Infrastructure
+→ Checkov IaC Scan
+→ Run Checkov
+```
+
+Checkov output can include:
+
+```text
+Passed checks
+Failed checks
+Skipped checks
+```
+
+Failed checks generally identify:
+
+```text
+Check ID
+Resource
+File
+Security issue
+Guidance
+```
+
+Each finding should be evaluated based on:
+
+1. What resource is affected?
+2. What configuration caused the finding?
+3. What security risk is being identified?
+4. Can the configuration be remediated?
+5. Is the control appropriate for this environment?
+6. If an exception is necessary, can it be justified and documented?
+
+---
+
+# 23. Commit Checkov Integration
+
+Review changes:
+
+```bash
+git diff .github/workflows/validate.yml
+```
+
+Stage:
+
+```bash
+git add .github/workflows/validate.yml
+```
+
+Commit:
+
+```bash
+git commit -m "Add Checkov Terraform security scanning"
+```
+
+Push:
+
+```bash
+git push origin main
+```
+
+The workflow now performs:
+
+```text
+Terraform Validation
+Helm Validation
+Checkov IaC Scan
+```
+
+---
+
+# 24. Add Trivy Security Scanning
+
+The next DevSecOps control is Trivy.
+
+At this stage of the project, the demo application uses an existing NGINX image rather than a custom application image built by this repository.
+
+Therefore, Trivy is initially configured as a repository/filesystem security scan.
+
+Later phases can extend Trivy to scan custom container images before they are pushed to a container registry.
+
+---
+
+# 25. Add the Trivy Job
+
+Add the following job to:
+
+```text
+.github/workflows/validate.yml
+```
+
+```yaml
+  trivy:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+          ignore-unfixed: true
+```
+
+The complete workflow now contains four major jobs:
+
+```text
+jobs:
+├── terraform
+├── helm
+├── checkov
+└── trivy
+```
+
+---
+
+# 26. Trivy Severity Configuration
+
+The scan is configured for:
+
+```yaml
+severity: CRITICAL,HIGH
+```
+
+This focuses the initial assessment on higher-severity findings.
+
+The configuration:
+
+```yaml
+ignore-unfixed: true
+```
+
+avoids treating vulnerabilities without available fixes in the same manner as actionable findings.
+
+---
+
+# 27. Initial Trivy Reporting Mode
+
+The initial configuration uses:
+
+```yaml
+exit-code: "0"
+```
+
+This means Trivy reports findings without causing the GitHub Actions job to fail.
+
+This is intentional during the initial security assessment.
+
+The eventual production-style configuration can use:
+
+```yaml
+exit-code: "1"
+```
+
+so qualifying findings cause CI to fail.
+
+The progression is:
+
+```text
+Phase 1
+Security Visibility
+exit-code: 0
+      |
+      v
+Review Findings
+      |
+      v
+Remediation
+      |
+      v
+Phase 2
+Security Enforcement
+exit-code: 1
+```
+
+---
+
+# 28. Commit Trivy Integration
+
+Stage the updated workflow:
+
+```bash
+git add .github/workflows/validate.yml
+```
+
+Commit:
+
+```bash
+git commit -m "Add Trivy security scanning"
+```
+
+Push:
+
+```bash
+git push origin main
+```
+
+GitHub Actions automatically starts another workflow run.
+
+---
+
+# 29. Final CI Workflow
+
+After implementing both security tools, the CI pipeline contains:
+
+```text
+                   Git Push / PR
+                        |
+                        v
+                  GitHub Actions
+                        |
+        +---------------+---------------+
+        |               |               |
+        v               v               v
+    Terraform          Helm          Security
+        |               |               |
+        |               |       +-------+-------+
+        |               |       |               |
+        v               v       v               v
+      fmt             lint   Checkov          Trivy
+        |               |
+        v               v
+      init          template
+        |
+        v
+    validate
+```
+
+The expected GitHub Actions jobs are:
+
+```text
+✓ Terraform Validation
+✓ Helm Validation
+✓ Checkov IaC Scan
+✓ Trivy Security Scan
+```
+
+---
+
+# 30. CI and GitOps Integration
+
+The CI pipeline does not directly deploy the application to EKS.
+
+This is an intentional architectural decision.
+
+GitHub Actions performs validation and security analysis.
+
+ArgoCD performs deployment and reconciliation.
+
+The complete flow is:
+
+```text
+Developer
+    |
+    v
+Code Change
+    |
+    v
+Git Commit
+    |
+    v
+Git Push / Pull Request
+    |
+    v
+GitHub Actions
+    |
+    +--> Terraform Validation
+    |
+    +--> Helm Validation
+    |
+    +--> Checkov
+    |
+    +--> Trivy
+    |
+    v
+Repository Desired State
+    |
+    v
+ArgoCD
+    |
+    v
+Compare Git vs Cluster
+    |
+    v
+Automatic Synchronization
+    |
+    v
+Amazon EKS
+    |
+    v
+Kubernetes Deployment
+```
+
+This creates a clear separation between:
+
+```text
+CI = GitHub Actions
+
+CD = ArgoCD
+```
+
+---
+
+# 31. Why AWS Credentials Are Not Required for CI Validation
+
+The initial GitHub Actions workflow does not perform:
+
+```text
+terraform apply
+aws eks update-kubeconfig
+kubectl apply
+helm install
+```
+
+Therefore, AWS credentials are not required for the validation workflow.
+
+This reduces the number of credentials exposed to CI and follows the principle of least privilege.
+
+The CI pipeline validates source configuration rather than modifying AWS infrastructure.
+
+---
+
+# 32. DevSecOps Strategy
+
+The project introduces security checks early in the software delivery lifecycle.
+
+Instead of:
+
+```text
+Build
+   |
+   v
+Deploy
+   |
+   v
+Discover Security Problem
+```
+
+the target process is:
+
+```text
+Code
+   |
+   v
+Validate
+   |
+   v
+Security Scan
+   |
+   v
+Review
+   |
+   v
+Merge
+   |
+   v
+Deploy
+```
+
+This is an example of shifting security validation earlier in the delivery lifecycle.
+
+---
+
+# 33. Security Gate Maturity
+
+The initial security tools run in reporting mode.
+
+Checkov:
+
+```yaml
+soft_fail: true
+```
+
+Trivy:
+
+```yaml
+exit-code: "0"
+```
+
+This allows findings to be collected and evaluated.
+
+After remediation, the pipeline can be hardened to:
+
+```yaml
+soft_fail: false
+```
+
+and:
+
+```yaml
+exit-code: "1"
+```
+
+The resulting workflow becomes:
+
+```text
+Code Change
+     |
+     v
+CI Validation
+     |
+     v
+Security Scan
+     |
+     +---- FAIL ----> Developer fixes issue
+     |
+     |
+    PASS
+     |
+     v
+Merge
+     |
+     v
+ArgoCD
+     |
+     v
+EKS
+```
+
+---
+
+# 34. Troubleshooting GitHub Actions
+
+## Terraform Formatting Failure
+
+If GitHub Actions reports a failure during:
+
+```text
+Terraform Format Check
+```
+
+run locally:
+
+```bash
+cd terraform
+terraform fmt -recursive
+cd ..
+```
+
+Review:
+
+```bash
+git diff
+```
+
+Then commit:
+
+```bash
+git add terraform
+git commit -m "Format Terraform configuration"
+git push origin main
+```
+
+---
+
+## Terraform Initialization Failure
+
+If:
+
+```text
+Terraform Init
+```
+
+fails, inspect the GitHub Actions logs.
+
+Possible areas to investigate include:
+
+- provider configuration
+- Terraform module versions
+- module download failures
+- Terraform syntax
+- dependency configuration
+
+Reproduce locally with:
+
+```bash
+cd terraform
+terraform init -backend=false
+```
+
+---
+
+## Terraform Validation Failure
+
+Reproduce locally:
+
+```bash
+cd terraform
+terraform validate
+```
+
+Correct the reported Terraform error before pushing another change.
+
+---
+
+## Helm Lint Failure
+
+Reproduce locally:
+
+```bash
+helm lint helm/demo-app
+```
+
+Check:
+
+```text
+Chart.yaml
+values.yaml
+templates/
+```
+
+for YAML or Helm template errors.
+
+---
+
+## Helm Template Failure
+
+Run:
+
+```bash
+helm template demo-app helm/demo-app
+```
+
+Inspect the rendered Kubernetes manifests.
+
+This is particularly useful for identifying:
+
+- invalid Helm template expressions
+- missing values
+- YAML indentation issues
+- incorrect variable references
+
+---
+
+## Checkov Findings
+
+A Checkov finding should be investigated rather than automatically suppressed.
+
+Recommended process:
+
+```text
+Finding
+   |
+   v
+Identify Resource
+   |
+   v
+Understand Security Control
+   |
+   v
+Determine Applicability
+   |
+   +--> Remediate
+   |
+   +--> Document justified exception
+```
+
+---
+
+## Trivy Findings
+
+Review:
+
+```text
+Severity
+Affected component
+Available fix
+Configuration
+```
+
+Critical and High findings should receive priority during remediation.
+
+---
+
+# 35. Git Workflow for CI Changes
+
+Each CI change follows the same Git workflow used throughout this project.
+
+Check modifications:
+
+```bash
+git status
+```
+
+Review:
+
+```bash
+git diff
+```
+
+Stage:
+
+```bash
+git add .github/workflows/validate.yml
+```
+
+Review staged changes:
+
+```bash
+git diff --cached
+```
+
+Commit:
+
+```bash
+git commit -m "<describe the CI change>"
+```
+
+Push:
+
+```bash
+git push origin main
+```
+
+Then verify:
+
+```text
+GitHub
+→ Repository
+→ Actions
+→ Validate Infrastructure
+```
+
+---
+
+# 36. CI/CD Security Practices
+
+The following practices are used in this phase:
+
+### No AWS credentials stored in source code
+
+AWS credentials must never be committed to:
+
+```text
+README.md
+Terraform files
+GitHub Actions workflow files
+Helm values
+Kubernetes manifests
+```
+
+### Read-only repository permissions
+
+The workflow specifies:
+
+```yaml
+permissions:
+  contents: read
+```
+
+where appropriate.
+
+### No direct infrastructure deployment from CI
+
+The validation workflow does not run:
+
+```bash
+terraform apply
+```
+
+### No direct Kubernetes deployment from CI
+
+GitHub Actions does not run:
+
+```bash
+kubectl apply
+```
+
+for the application deployment.
+
+ArgoCD owns Kubernetes reconciliation.
+
+### Security scanning before enforcement
+
+Checkov and Trivy begin in reporting mode so findings can be reviewed before hard enforcement is enabled.
+
+---
+
+# 37. Validation Checklist
+
+The CI/DevSecOps phase is considered successfully implemented when the following have been verified:
+
+```text
+[ ] .github/workflows/validate.yml exists
+
+[ ] Workflow triggers on pushes to main
+
+[ ] Workflow supports pull requests to main
+
+[ ] Workflow can be manually triggered
+
+[ ] Terraform formatting validation runs
+
+[ ] Terraform initialization succeeds
+
+[ ] Terraform validation succeeds
+
+[ ] Helm lint succeeds
+
+[ ] Helm templates render successfully
+
+[ ] Checkov scans Terraform
+
+[ ] Checkov findings are visible in GitHub Actions
+
+[ ] Trivy scans the repository
+
+[ ] Trivy findings are visible in GitHub Actions
+
+[ ] CI does not contain AWS credentials
+
+[ ] CI does not directly deploy infrastructure
+
+[ ] ArgoCD remains responsible for Kubernetes CD
+
+[ ] GitHub Actions workflow is committed to Git
+
+[ ] GitHub Actions workflow runs successfully
+```
+
+Only mark a checkbox complete after verifying it in the environment.
+
+---
+
+# 38. Interview Talking Points
+
+## Explain the CI/CD architecture
+
+A concise explanation of the project architecture is:
+
+> GitHub Actions provides the Continuous Integration layer for the project. Every push or pull request can run Terraform formatting and validation, Helm linting and template rendering, and security scanning with Checkov and Trivy. ArgoCD provides the Continuous Delivery layer by monitoring the Git repository and reconciling the Helm-defined desired state into Amazon EKS.
+
+---
+
+## Why separate GitHub Actions and ArgoCD?
+
+The design separates validation from deployment.
+
+```text
+GitHub Actions
+      |
+      v
+CI / Validation / Security
+
+ArgoCD
+      |
+      v
+CD / GitOps / Reconciliation
+```
+
+GitHub Actions determines whether configuration meets quality and security checks.
+
+ArgoCD continuously ensures that the Kubernetes cluster matches the desired state stored in Git.
+
+---
+
+## Why not run kubectl from GitHub Actions?
+
+Using ArgoCD as the deployment mechanism provides a GitOps model where Git is the source of truth.
+
+Instead of CI pushing changes directly into Kubernetes:
+
+```text
+CI
+ |
+ v
+kubectl apply
+ |
+ v
+Cluster
+```
+
+the project uses:
+
+```text
+Git
+ |
+ v
+ArgoCD
+ |
+ v
+Cluster
+```
+
+This makes the desired state visible and version-controlled.
+
+---
+
+## What role does Checkov play?
+
+Checkov performs static security analysis against Terraform Infrastructure-as-Code.
+
+It helps identify potentially insecure cloud infrastructure configuration before deployment.
+
+---
+
+## What role does Trivy play?
+
+Trivy provides additional security scanning.
+
+In the current phase it scans the repository/filesystem.
+
+A future phase can extend Trivy to scan custom container images before they are published and deployed.
+
+---
+
+## Why are the security scanners initially non-blocking?
+
+The initial implementation focuses on security visibility and remediation.
+
+Checkov uses:
+
+```yaml
+soft_fail: true
+```
+
+and Trivy uses:
+
+```yaml
+exit-code: "0"
+```
+
+This allows findings to be collected without immediately stopping development.
+
+After important findings are remediated, both tools can be converted into blocking CI security gates.
+
+---
+
+# 39. Skills Demonstrated in This Phase
+
+This phase demonstrates hands-on experience with:
+
+- GitHub Actions
+- Continuous Integration
+- CI/CD architecture
+- Terraform validation
+- Infrastructure as Code
+- Helm validation
+- Kubernetes manifest generation
+- Checkov
+- Trivy
+- DevSecOps
+- Shift-left security
+- GitOps
+- ArgoCD
+- Git workflow
+- Automated quality gates
+- Security gates
+- CI troubleshooting
+
+---
+
+# 40. Future Improvements
+
+The next phase of the project can introduce:
+
+```text
+Feature Branch
+      |
+      v
+Pull Request
+      |
+      v
+Required CI Checks
+      |
+      v
+Security Gates
+      |
+      v
+Code Review
+      |
+      v
+Merge to Main
+      |
+      v
+ArgoCD
+      |
+      v
+Amazon EKS
+```
+
+Planned improvements include:
+
+- GitHub branch protection
+- Required pull-request checks
+- Blocking Checkov security gates
+- Blocking Trivy security gates
+- Custom Docker application
+- Docker image build pipeline
+- Container image vulnerability scanning
+- Amazon ECR
+- Image tagging strategy
+- ArgoCD deployment of versioned container images
+- Improved Kubernetes security controls
+- Additional observability and monitoring
+
+---
+
+# Phase 4 Summary
+
+The CI and DevSecOps phase extends the AWS EKS platform from an infrastructure and GitOps project into an automated software delivery platform.
+
+The project now combines:
+
+```text
+Terraform
+    |
+    v
+AWS Infrastructure
+    |
+    v
+Amazon EKS
+    |
+    v
+Kubernetes
+    |
+    v
+Helm
+    |
+    v
+GitHub
+    |
+    +---------------------+
+    |                     |
+    v                     v
+GitHub Actions          ArgoCD
+    |                     |
+    v                     v
+CI Validation          GitOps CD
+    |                     |
+    v                     v
+Checkov + Trivy        Amazon EKS
+```
+
+The resulting platform demonstrates Infrastructure as Code, Kubernetes orchestration, Helm packaging, GitOps continuous delivery, automated CI validation, security scanning, and operational troubleshooting within a single end-to-end DevOps project.
