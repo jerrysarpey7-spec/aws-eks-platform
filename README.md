@@ -3376,3 +3376,59 @@ Checkov + Trivy        Amazon EKS
 ```
 
 The resulting platform demonstrates Infrastructure as Code, Kubernetes orchestration, Helm packaging, GitOps continuous delivery, automated CI validation, security scanning, and operational troubleshooting within a single end-to-end DevOps project.
+
+
+## Checkov Security Findings
+
+### Finding 1
+
+- Check ID: `CKV_TF_1`
+- Resource: `vpc`
+- File: `terraform/main.tf`, lines 5-31
+- Reason: Terraform module source is version-pinned through the Terraform Registry but is not pinned to an immutable Git commit hash.
+- Status: Under review
+- Planned remediation: Evaluate switching the VPC module source to a Git URL pinned to a verified commit SHA.
+
+### Finding 2
+
+- Check ID: `CKV_TF_1`
+- Resource: `eks`
+- File: `terraform/main.tf`, lines 33-76
+- Reason: Terraform module source is version-pinned through the Terraform Registry but is not pinned to an immutable Git commit hash.
+- Status: Status: Remediated
+- Planned remediation: Evaluate switching the EKS module source to a Git URL pinned to a verified commit SHA.
+
+### CKV_TF_1 — Terraform module source integrity
+
+**Original finding**
+
+The VPC and EKS modules were version-pinned through the Terraform Registry but were not pinned to immutable source revisions.
+
+**Remediation**
+
+The module sources were changed to verified GitHub repositories pinned to exact commit SHAs corresponding to the original module releases.
+
+This ensures Terraform retrieves the exact reviewed module revision and reduces supply-chain risk from mutable module references.
+
+**Validation**
+
+Checkov was rerun locally:
+
+```bash
+checkov -d terraform --framework terraform
+
+Passed checks: 5
+Failed checks: 0
+Skipped checks: 0
+
+CKV_TF_1 PASSED for resource: vpc
+CKV_TF_1 PASSED for resource: eks
+
+
+Then commit the README and Terraform hardening changes:
+
+```bash
+git status
+git add terraform/main.tf README.md
+git commit -m "Remediate Terraform module supply-chain findings"
+git push origin main
