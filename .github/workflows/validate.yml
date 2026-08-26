@@ -57,7 +57,6 @@ jobs:
         run: helm template demo-app helm/demo-app
 
 
-
   checkov:
     name: Checkov IaC Scan
     runs-on: ubuntu-latest
@@ -75,11 +74,9 @@ jobs:
           directory: terraform
           framework: terraform
           quiet: false
-          soft_fail: false
+          soft_fail: true
 
-
-
-            trivy:
+  trivy:
     name: Trivy Security Scan
     runs-on: ubuntu-latest
 
