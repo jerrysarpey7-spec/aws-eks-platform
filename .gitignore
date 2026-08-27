@@ -1,11 +1,27 @@
+# Terraform working directory
 .terraform/
+
+# Terraform state
 *.tfstate
 *.tfstate.*
-crash.log
+
+# Local Terraform variables
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform plans
+tfplan
+*.tfplan
+
+# Local environment / credentials
 .env
 .env.*
 *.pem
 *.key
+
+# AWS / Kubernetes local configuration
 .aws/
 kubeconfig
+
+# macOS
 .DS_Store
