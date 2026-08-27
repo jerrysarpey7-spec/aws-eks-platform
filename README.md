@@ -3432,3 +3432,7 @@ git status
 git add terraform/main.tf README.md
 git commit -m "Remediate Terraform module supply-chain findings"
 git push origin main
+
+## Branch Protection Test
+
+This change is used to validate the pull-request and required CI-check workflow.
