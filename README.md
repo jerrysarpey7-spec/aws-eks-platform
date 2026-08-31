@@ -1,4 +1,6 @@
-# AWS EKS Kubernetes Platform
+ # AWS EKS Kubernetes Platform
+
+AWS EKS DevOps Platform
 
 A hands-on DevOps portfolio project that builds, deploys, validates, troubleshoots, and operates an Amazon EKS platform using Terraform, Kubernetes, Helm, Argo CD, Git, and GitHub.
 
