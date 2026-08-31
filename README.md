@@ -1,10 +1,10 @@
-AWS EKS DevOps Platform
+# AWS EKS DevOps Platform
 
 A hands-on DevOps portfolio project demonstrating Infrastructure as
 Code, Amazon EKS, Kubernetes, Helm, GitOps with Argo CD, CI validation,
 DevSecOps security scanning, troubleshooting, and cost-aware teardown.
 
-Project Overview
+## Project Overview
 
 This project implements an end-to-end AWS EKS delivery platform rather
 than only deploying a sample Kubernetes workload. Terraform defines the
@@ -13,45 +13,33 @@ desired state, GitHub Actions performs CI and security validation, and
 Argo CD continuously reconciles the Kubernetes application into Amazon
 EKS.
 
-Key outcomes
+### Key outcomes
 
-Provisioned an AWS VPC and Amazon EKS platform with Terraform.
+-   Provisioned an AWS VPC and Amazon EKS platform with Terraform.
+-   Deployed EKS managed worker nodes into private subnets across two
+    Availability Zones.
+-   Configured controlled EKS API access and IAM/EKS access entries.
+-   Packaged a demo application with Helm.
+-   Implemented Argo CD GitOps delivery from GitHub to EKS.
+-   Verified Git-driven automatic scaling from 2 to 3 replicas.
+-   Enabled Argo CD automated sync, pruning, and self-healing.
+-   Implemented GitHub Actions validation for Terraform and Helm.
+-   Integrated Checkov Infrastructure-as-Code security scanning.
+-   Remediated Checkov `CKV_TF_1` module supply-chain findings by
+    pinning Terraform modules to immutable Git commit SHAs.
+-   Integrated Trivy repository/security scanning and hardened it into a
+    blocking security gate.
+-   Separated environment-specific Terraform values from committed
+    infrastructure code.
+-   Troubleshot EKS networking, authentication/authorization, and Helm
+    validation issues.
+-   Designed the lab so the live AWS infrastructure can be destroyed
+    after validation while the complete platform remains reproducible
+    from Git.
 
-Deployed EKS managed worker nodes into private subnets across two
-Availability Zones.
+## Architecture
 
-Configured controlled EKS API access and IAM/EKS access entries.
-
-Packaged a demo application with Helm.
-
-Implemented Argo CD GitOps delivery from GitHub to EKS.
-
-Verified Git-driven automatic scaling from 2 to 3 replicas.
-
-Enabled Argo CD automated sync, pruning, and self-healing.
-
-Implemented GitHub Actions validation for Terraform and Helm.
-
-Integrated Checkov Infrastructure-as-Code security scanning.
-
-Remediated Checkov CKV_TF_1 module supply-chain findings by
-pinning Terraform modules to immutable Git commit SHAs.
-
-Integrated Trivy repository/security scanning and hardened it into a
-blocking security gate.
-
-Separated environment-specific Terraform values from committed
-infrastructure code.
-
-Troubleshot EKS networking, authentication/authorization, and Helm
-validation issues.
-
-Designed the lab so the live AWS infrastructure can be destroyed
-after validation while the complete platform remains reproducible
-from Git.
-
-Architecture
-
+``` text
 Developer / Local Mac
         |
         | git push
@@ -90,27 +78,29 @@ Developer / Local Mac
                            AZ 1                              AZ 2
                               \                               /
                                +---------- AWS VPC ----------+
+```
 
-Technology Stack
+## Technology Stack
 
-Technology       Purpose
+  Technology       Purpose
+  ---------------- ----------------------------------------------------
+  AWS              Cloud platform
+  Amazon VPC       Network isolation, routing, public/private subnets
+  Amazon EKS       Managed Kubernetes control plane
+  Terraform        Infrastructure as Code
+  Kubernetes       Container orchestration
+  Helm             Kubernetes application packaging
+  Argo CD          GitOps continuous delivery and reconciliation
+  GitHub           Source control and desired-state repository
+  GitHub Actions   CI validation and security automation
+  Checkov          Terraform/IaC security scanning
+  Trivy            Repository, vulnerability, and secret scanning
+  AWS CLI          AWS administration and identity validation
+  kubectl          Kubernetes administration
 
-AWS              Cloud platform
-Amazon VPC       Network isolation, routing, public/private subnets
-Amazon EKS       Managed Kubernetes control plane
-Terraform        Infrastructure as Code
-Kubernetes       Container orchestration
-Helm             Kubernetes application packaging
-Argo CD          GitOps continuous delivery and reconciliation
-GitHub           Source control and desired-state repository
-GitHub Actions   CI validation and security automation
-Checkov          Terraform/IaC security scanning
-Trivy            Repository, vulnerability, and secret scanning
-AWS CLI          AWS administration and identity validation
-kubectl          Kubernetes administration
+## Repository Structure
 
-Repository Structure
-
+``` text
 aws-eks-platform/
 ├── .github/
 │   └── workflows/
@@ -134,112 +124,119 @@ aws-eks-platform/
 ├── screenshots/
 ├── .gitignore
 └── README.md
+```
 
-Local terraform.tfvars, Terraform state, plan files, credentials,
-tokens, private keys, kubeconfig files, and other environment-specific
-secrets are intentionally excluded from Git.
+> Local `terraform.tfvars`, Terraform state, plan files, credentials,
+> tokens, private keys, kubeconfig files, and other environment-specific
+> secrets are intentionally excluded from Git.
 
-Infrastructure Design
+# Infrastructure Design
 
-VPC
+## VPC
 
-The Terraform configuration creates a VPC using the 10.20.0.0/16 CIDR
-across two Availability Zones in us-east-1.
+The Terraform configuration creates a VPC using the `10.20.0.0/16` CIDR
+across two Availability Zones in `us-east-1`.
 
 Private subnets:
 
+``` text
 10.20.1.0/24
 10.20.2.0/24
+```
 
 Public subnets:
 
+``` text
 10.20.101.0/24
 10.20.102.0/24
+```
 
 The lab uses a single NAT Gateway to provide outbound connectivity for
 private resources while limiting unnecessary lab cost.
 
-Amazon EKS
+## Amazon EKS
 
 The EKS configuration includes:
 
-Kubernetes 1.31 for the implementation captured in this project.
+-   Kubernetes 1.31 for the implementation captured in this project.
+-   Managed node group using `t3.medium` instances.
+-   Two desired worker nodes during validation.
+-   Worker nodes attached to private subnets.
+-   Public and private Kubernetes API endpoint access.
+-   Public API access restricted through an environment-specific CIDR
+    variable.
+-   IAM/EKS access entries managed through Terraform.
 
-Managed node group using t3.medium instances.
+> Kubernetes and module versions age over time. Verify currently
+> supported versions before rebuilding the environment.
 
-Two desired worker nodes during validation.
-
-Worker nodes attached to private subnets.
-
-Public and private Kubernetes API endpoint access.
-
-Public API access restricted through an environment-specific CIDR
-variable.
-
-IAM/EKS access entries managed through Terraform.
-
-Kubernetes and module versions age over time. Verify currently
-supported versions before rebuilding the environment.
-
-Environment-specific configuration
+## Environment-specific configuration
 
 Sensitive/environment-specific values are passed through Terraform
 variables rather than hard-coded in reusable infrastructure code.
 
-Example terraform/terraform.tfvars.example:
+Example `terraform/terraform.tfvars.example`:
 
+``` hcl
 cluster_admin_principal_arn = "arn:aws:iam::<AWS-ACCOUNT-ID>:user/<IAM-USER>"
 cluster_public_access_cidr  = "<YOUR-PUBLIC-IP>/32"
+```
 
-The real terraform.tfvars is local and ignored by Git.
+The real `terraform.tfvars` is local and ignored by Git.
 
-Terraform Workflow
+# Terraform Workflow
 
-From terraform/:
+From `terraform/`:
 
+``` bash
 terraform fmt -check -recursive
 terraform init
 terraform validate
 terraform plan
 terraform apply
+```
 
 The infrastructure build was validated before Kubernetes and GitOps
 configuration proceeded.
 
-EKS Connectivity and Authentication Troubleshooting
+# EKS Connectivity and Authentication Troubleshooting
 
-1. Kubernetes API timeout
+## 1. Kubernetes API timeout
 
-Symptom
+### Symptom
 
+``` text
 dial tcp 10.20.x.x:443: i/o timeout
+```
 
-Root cause
+### Root cause
 
 The EKS API was initially reachable only through private VPC addressing
-while kubectl was running from a local Mac without a network route
+while `kubectl` was running from a local Mac without a network route
 into the VPC.
 
-Resolution
+### Resolution
 
 The lab was configured with both public and private EKS API endpoint
 access. Public access was restricted to the administrator's configured
-/32 CIDR rather than broadly exposing the endpoint.
+`/32` CIDR rather than broadly exposing the endpoint.
 
-This separated network reachability from later authentication
+This separated **network reachability** from later authentication
 problems.
 
-2. EKS authentication/authorization
+## 2. EKS authentication/authorization
 
-After endpoint connectivity was corrected, kubectl returned a
+After endpoint connectivity was corrected, `kubectl` returned a
 credentials/login error.
 
 The troubleshooting sequence included:
 
+``` bash
 aws sts get-caller-identity
 aws eks get-token --cluster-name portfolio-eks --region us-east-1
 aws eks describe-cluster --name portfolio-eks --region us-east-1 --query "cluster.accessConfig"
 aws eks list-access-entries --cluster-name portfolio-eks --region us-east-1
+```
 
 The administrator identity could obtain an EKS token but required an EKS
 access entry and associated cluster access policy. That access was
@@ -247,6 +244,7 @@ managed through Terraform.
 
 A useful troubleshooting model from the project is:
 
+``` text
 i/o timeout
     -> network reachability
 
@@ -255,13 +253,15 @@ i/o timeout
 
 Forbidden
     -> authenticated, but insufficient authorization/RBAC
+```
 
-Helm Application
+# Helm Application
 
-The demo application is packaged as a Helm chart under helm/demo-app.
+The demo application is packaged as a Helm chart under `helm/demo-app`.
 
 Key values:
 
+``` yaml
 replicaCount: 2
 
 image:
@@ -271,83 +271,89 @@ image:
 service:
   type: ClusterIP
   port: 80
+```
 
 Validation commands:
 
+``` bash
 helm lint helm/demo-app
 helm template demo-app helm/demo-app
+```
 
 A chart metadata error encountered during implementation was corrected
-by fixing Chart.yaml and rerunning Helm validation.
+by fixing `Chart.yaml` and rerunning Helm validation.
 
-Argo CD and GitOps
+# Argo CD and GitOps
 
-Argo CD installation
+## Argo CD installation
 
-Argo CD runs in the argocd namespace. For this lab, the UI is accessed
+Argo CD runs in the `argocd` namespace. For this lab, the UI is accessed
 locally rather than exposing another public AWS load balancer.
 
+``` bash
 kubectl create namespace argocd
 kubectl apply -n argocd --server-side --force-conflicts \
   -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 kubectl get pods -n argocd
+```
 
 For a production implementation, pin and review a specific Argo CD
-release instead of relying on a moving stable reference.
+release instead of relying on a moving `stable` reference.
 
 Local UI access:
 
+``` bash
 kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
 
-Then browse locally to https://localhost:8080.
+Then browse locally to `https://localhost:8080`.
 
-Application configuration
+## Application configuration
 
-argocd/application.yaml points Argo CD to:
+`argocd/application.yaml` points Argo CD to:
 
-Repository: this GitHub project.
-
-Revision: main.
-
-Path: helm/demo-app.
-
-Destination namespace: demo.
-
-Automated synchronization: enabled.
-
-Pruning: enabled.
-
-Self-healing: enabled.
-
-Namespace creation: enabled.
+-   Repository: this GitHub project.
+-   Revision: `main`.
+-   Path: `helm/demo-app`.
+-   Destination namespace: `demo`.
+-   Automated synchronization: enabled.
+-   Pruning: enabled.
+-   Self-healing: enabled.
+-   Namespace creation: enabled.
 
 Git therefore acts as the desired-state source for the Kubernetes
 application.
 
-GitOps automatic synchronization test
+## GitOps automatic synchronization test
 
 The Helm replica count was changed in Git from:
 
+``` yaml
 replicaCount: 2
+```
 
 to:
 
+``` yaml
 replicaCount: 3
+```
 
-The change was committed and pushed to main. Argo CD detected the
+The change was committed and pushed to `main`. Argo CD detected the
 updated desired state and Kubernetes created a third application pod
-without a manual kubectl apply.
+without a manual `kubectl apply`.
 
 Observed final Argo CD status after synchronization:
 
+``` text
 demo-app   Synced   Healthy
+```
 
 The configuration was subsequently restored through Git to the normal
 two-replica state.
 
-Configuration drift and self-healing
+## Configuration drift and self-healing
 
-The Argo CD Application is configured with selfHeal: true. The project
+The Argo CD Application is configured with `selfHeal: true`. The project
 includes a drift test in which the live Deployment is manually scaled
 away from the Git-defined replica count and Argo CD reconciles the
 resource back toward the desired state stored in Git.
@@ -356,12 +362,13 @@ This demonstrates the operational difference between directly
 manipulating live Kubernetes state and managing desired state
 declaratively through GitOps.
 
-CI/CD and DevSecOps Automation
+# CI/CD and DevSecOps Automation
 
-Design
+## Design
 
 The project separates Continuous Integration from Continuous Delivery:
 
+``` text
 Git push / pull request
         |
         v
@@ -380,46 +387,55 @@ Argo CD
         |
         v
 Amazon EKS
+```
 
 GitHub Actions validates code and configuration. Argo CD owns Kubernetes
-reconciliation. The CI workflow does not need to run kubectl apply for
+reconciliation. The CI workflow does not need to run `kubectl apply` for
 application delivery.
 
-GitHub Actions workflow
+## GitHub Actions workflow
 
 The workflow is stored at:
 
+``` text
 .github/workflows/validate.yml
+```
 
-It runs on pushes to main, pull requests targeting main, and manual
+It runs on pushes to `main`, pull requests targeting `main`, and manual
 execution.
 
-Terraform validation
+### Terraform validation
 
+``` text
 terraform fmt -check -recursive
         |
 terraform init -backend=false
         |
 terraform validate
+```
 
--backend=false allows CI to validate providers, modules, syntax, and
+`-backend=false` allows CI to validate providers, modules, syntax, and
 configuration without requiring access to a live Terraform state
 backend.
 
-Helm validation
+### Helm validation
 
+``` text
 helm lint helm/demo-app
         |
 helm template demo-app helm/demo-app
+```
 
-Checkov
+### Checkov
 
 Checkov performs static security analysis of the Terraform
 configuration.
 
 An important finding was:
 
+``` text
 CKV_TF_1
+```
 
 The original VPC and EKS module references were version-pinned but not
 pinned to immutable source revisions. The modules were changed to
@@ -428,17 +444,19 @@ intended releases.
 
 Validation after remediation:
 
+``` text
 Passed checks: 5
 Failed checks: 0
 Skipped checks: 0
 
 CKV_TF_1 PASSED for resource: vpc
 CKV_TF_1 PASSED for resource: eks
+```
 
 This reduces Terraform module supply-chain risk by ensuring the reviewed
 source revision cannot move unexpectedly.
 
-Trivy
+### Trivy
 
 Trivy performs repository/filesystem security scanning, including
 vulnerability and secret-detection capabilities relevant to the
@@ -450,131 +468,120 @@ security gate for qualifying findings.
 A future container phase can extend Trivy to scan a custom application
 image before publishing it to Amazon ECR.
 
-Security Controls
+# Security Controls
 
 The project demonstrates the following controls:
 
-Private subnets for EKS worker nodes.
+-   Private subnets for EKS worker nodes.
+-   Restricted public EKS API CIDR plus private endpoint access.
+-   IAM-based EKS administration.
+-   EKS access entries managed as code.
+-   Environment-specific IAM/network values separated from committed
+    Terraform configuration.
+-   `terraform.tfvars` excluded from Git.
+-   Terraform state and plan files excluded from Git.
+-   `.terraform.lock.hcl` retained for reproducible provider selections.
+-   Terraform modules pinned to immutable Git commit SHAs.
+-   Checkov IaC security scanning.
+-   Blocking Trivy security gate.
+-   Read-only GitHub Actions repository permissions where appropriate.
+-   GitOps desired-state management rather than direct CI-to-cluster
+    application deployment.
 
-Restricted public EKS API CIDR plus private endpoint access.
+# Validation Results
 
-IAM-based EKS administration.
+  -----------------------------------------------------------------------
+  Validation                          Result
+  ----------------------------------- -----------------------------------
+  Terraform formatting                Passed
 
-EKS access entries managed as code.
+  Terraform initialization            Passed
 
-Environment-specific IAM/network values separated from committed
-Terraform configuration.
+  Terraform validation                Passed
 
-terraform.tfvars excluded from Git.
+  Terraform infrastructure deployment Completed successfully
 
-Terraform state and plan files excluded from Git.
+  EKS worker nodes                    2 nodes observed `Ready` during
+                                      validation
 
-.terraform.lock.hcl retained for reproducible provider selections.
+  Core Kubernetes system Pods         Running during validation
 
-Terraform modules pinned to immutable Git commit SHAs.
+  EKS administrator access            Verified
 
-Checkov IaC security scanning.
+  Helm lint                           Passed
 
-Blocking Trivy security gate.
+  Helm template rendering             Passed
 
-Read-only GitHub Actions repository permissions where appropriate.
+  Argo CD installation                Components observed `Running`
 
-GitOps desired-state management rather than direct CI-to-cluster
-application deployment.
+  Argo CD Application                 Observed `Synced` and `Healthy`
 
-Validation Results
+  GitOps scaling                      Verified Git-driven scale from 2 to
+                                      3 replicas
 
-Validation                          Result
+  Restore through Git                 Verified return to normal 2-replica
+                                      configuration
 
-Terraform formatting                Passed
+  Checkov                             5 passed, 0 failed after
+                                      remediation
 
-Terraform initialization            Passed
+  Trivy                               Integrated and hardened as a
+                                      blocking security gate
 
-Terraform validation                Passed
+  Git working tree                    Clean after final GitOps
+                                      restoration commit
+  -----------------------------------------------------------------------
 
-Terraform infrastructure deployment Completed successfully
-
-EKS worker nodes                    2 nodes observed Ready during
-validation
-
-Core Kubernetes system Pods         Running during validation
-
-EKS administrator access            Verified
-
-Helm lint                           Passed
-
-Helm template rendering             Passed
-
-Argo CD installation                Components observed Running
-
-Argo CD Application                 Observed Synced and Healthy
-
-GitOps scaling                      Verified Git-driven scale from 2 to
-3 replicas
-
-Restore through Git                 Verified return to normal 2-replica
-configuration
-
-Checkov                             5 passed, 0 failed after
-remediation
-
-Trivy                               Integrated and hardened as a
-blocking security gate
-
-Cost Management and Cleanup
+# Cost Management and Cleanup
 
 This lab can generate AWS charges from resources such as:
 
-Amazon EKS control plane.
-
-EC2 managed worker nodes.
-
-NAT Gateway.
-
-Public IPv4 usage.
-
-EBS/storage and data transfer.
+-   Amazon EKS control plane.
+-   EC2 managed worker nodes.
+-   NAT Gateway.
+-   Public IPv4 usage.
+-   EBS/storage and data transfer.
 
 The recommended portfolio workflow is:
 
+``` text
 Provision -> Validate -> Capture evidence -> Destroy
+```
 
 Cleanup:
 
+``` bash
 cd terraform
 terraform destroy
+```
 
 After destruction, verify that the EKS cluster and supporting resources
 have been removed. The Git repository remains the reproducible
 definition of the platform.
 
-Portfolio Evidence
+# Portfolio Evidence
 
-Useful screenshots to retain in screenshots/:
+Useful screenshots to retain in `screenshots/`:
 
-GitHub Actions workflow showing successful CI/security checks.
-
-Checkov result showing zero failed checks after remediation.
-
-Argo CD UI showing demo-app as Synced and Healthy.
-
-kubectl get nodes showing both EKS worker nodes Ready.
-
-kubectl get all -n demo showing the Deployment, Pods, ReplicaSet,
-and Service.
-
-Git history showing the GitOps test, security-gate hardening, and
-Terraform module hardening commits.
+1.  GitHub Actions workflow showing successful CI/security checks.
+2.  Checkov result showing zero failed checks after remediation.
+3.  Argo CD UI showing `demo-app` as `Synced` and `Healthy`.
+4.  `kubectl get nodes` showing both EKS worker nodes `Ready`.
+5.  `kubectl get all -n demo` showing the Deployment, Pods, ReplicaSet,
+    and Service.
+6.  Git history showing the GitOps test, security-gate hardening, and
+    Terraform module hardening commits.
 
 Before publishing screenshots, redact or avoid AWS account IDs,
 credentials, tokens, passwords, private IP-sensitive context, Terraform
 state, and environment-specific values.
 
-Engineering Lessons
+# Engineering Lessons
 
 This project demonstrates an engineering workflow rather than a perfect
 first-pass build:
 
+``` text
 BUILD
   |
 TEST
@@ -592,49 +599,36 @@ RETEST
 VALIDATE
   |
 COMMIT + DOCUMENT
+```
 
 The most important troubleshooting lesson was to separate EKS problems
 into network reachability, authentication, and authorization instead of
-treating every kubectl failure as the same issue.
+treating every `kubectl` failure as the same issue.
 
-Production Improvements
+# Production Improvements
 
 This is a portfolio/lab platform. Production improvements could include:
 
-Remote encrypted Terraform state with locking.
+-   Remote encrypted Terraform state with locking.
+-   Separate development, test, staging, and production environments.
+-   Stronger least-privilege IAM and workload identity using EKS Pod
+    Identity or IRSA as appropriate.
+-   Secrets Manager/External Secrets integration.
+-   Custom application container build pipeline.
+-   Amazon ECR.
+-   Trivy container image scanning before publication/deployment.
+-   Immutable image tags/digests.
+-   Ingress/load balancing, DNS, and TLS.
+-   Horizontal/cluster autoscaling.
+-   Prometheus/Grafana or managed observability.
+-   Centralized logging and alerting.
+-   Backup and disaster-recovery controls.
+-   Policy-as-code admission controls.
+-   Controlled environment promotion and required review gates.
 
-Separate development, test, staging, and production environments.
+# Project Status
 
-Stronger least-privilege IAM and workload identity using EKS Pod
-Identity or IRSA as appropriate.
-
-Secrets Manager/External Secrets integration.
-
-Custom application container build pipeline.
-
-Amazon ECR.
-
-Trivy container image scanning before publication/deployment.
-
-Immutable image tags/digests.
-
-Ingress/load balancing, DNS, and TLS.
-
-Horizontal/cluster autoscaling.
-
-Prometheus/Grafana or managed observability.
-
-Centralized logging and alerting.
-
-Backup and disaster-recovery controls.
-
-Policy-as-code admission controls.
-
-Controlled environment promotion and required review gates.
-
-Project Status
-
-Core project complete.
+**Core project complete.**
 
 Completed capabilities include Terraform-based AWS/EKS provisioning, EKS
 access troubleshooting, Helm packaging and validation, Argo CD GitOps
@@ -645,6 +639,7 @@ teardown.
 The strongest next technical extension is a complete container
 lifecycle:
 
+``` text
 Application source
        |
        v
@@ -664,3 +659,4 @@ Argo CD
        |
        v
 Amazon EKS
+```
